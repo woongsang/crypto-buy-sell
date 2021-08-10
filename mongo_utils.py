@@ -1,3 +1,5 @@
+import time
+
 from dotenv import dotenv_values
 from pymongo import MongoClient
 
@@ -12,3 +14,14 @@ def db_connection(db_name):
     return db
 
 
+def retrieve_mongo_data(db, cycle_hours):
+    timestamp = time.time() * 1000
+    time_start = timestamp - cycle_hours * 60 * 60 * 1000
+    results = db.find({'timestamp': {'$gte': time_start}})
+    timestamp_list = []
+    price_list = []
+    for result in results:
+        timestamp_list.append(result['timestamp'])
+        price_list.append(result['price'])
+
+    return timestamp_list, price_list

@@ -17,7 +17,8 @@ class LarrySessionModel(BaseModel):
     cycle_hours: int
     position: int
     buy_percentage: float
-    stop_loss_percentage: float = 1
+    stop_loss_percentage: float = 5
     leverage_times: int = 1
     slippage_percentage: float = 0.1
+    entry_price: float = None
     close_timestamp: Optional[str] = None

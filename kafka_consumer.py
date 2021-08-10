@@ -1,5 +1,5 @@
 from mongo_utils import db_connection
-from utils import background, check_close_position
+from utils import background, check_close_position, check_open_position
 from kafka import KafkaConsumer
 from dotenv import dotenv_values
 
@@ -14,7 +14,9 @@ def consume_data(market):
                              )
     sessions_db = db_connection('larry_sessions')
     for data in consumer:
-        check_close_position(sessions_db, market, data['price'], data['timestamp'])
+        check_open_position(sessions_db, market, data, position=1)
+        check_open_position(sessions_db, market, data, position=-1)
+        check_close_position(sessions_db, market, data)
 
 
 def start_consuming():

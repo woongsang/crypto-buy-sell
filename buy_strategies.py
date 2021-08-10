@@ -1,0 +1,4 @@
+def volatility_breakout_price(prev_high, prev_low, prev_price, x=0.5, position=1):
+    prev_range = prev_high - prev_low
+    return prev_price + (x * prev_range) * position
+

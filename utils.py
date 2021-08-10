@@ -1,5 +1,7 @@
 import asyncio
 
+from bson import ObjectId
+
 from binance_api import open_position_limit_price, close_position
 from mongo_utils import db_connection
 
@@ -14,7 +16,7 @@ def background(f):
 @background
 def open_position(session, current_price):
     accounts_db = db_connection('exchange_accounts')
-    account = accounts_db[session['market']].find_one({'_id': session['exchange_account_id']})
+    account = accounts_db[session['market']].find_one({'_id': ObjectId(session['exchange_account_id'])})
     api_key = account['api_key']
     secret_key = account['secret_key']
     limit_price = current_price * (1 + session['position'] * session['slippage_percentage'] / 100)
@@ -30,12 +32,22 @@ def reached_stop_loss():
     return False
 
 
-def check_close_position(sessions_db, market, current_price, current_timestamp):
-    in_position_sessions = sessions_db[market].find({'close_timestamp': {'$ne': None}})
+def check_open_position(sessions_db, market, data, position):
+    sign = '$lte' if position == 1 else '$gte'
+    sessions = sessions_db[market].find({'close_timestamp': {'$eq': None},
+                                         'position': {'$eq': 1},
+                                         'entry_price': {sign: data['price']}
+                                         })
+    for session in sessions:
+        open_position_limit_price(session)
+
+
+def check_close_position(sessions_db, market, data):
+    open_sessions = sessions_db[market].find({'close_timestamp': {'$ne': None}})
 
     remove_list = []
-    for session in in_position_sessions:
-        if current_timestamp >= session['close_timestamp'] or reached_stop_loss():
+    for session in open_sessions:
+        if data['timestamp'] >= session['close_timestamp'] or reached_stop_loss():
             close_position()
             remove_list.append(session['_id'])
 
