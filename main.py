@@ -40,12 +40,12 @@ async def start_larry_session(data: LarrySessionModel):
     larry_session = jsonable_encoder(data)
     mongo_timestamps, mongo_prices = retrieve_mongo_data(db_connection('data'),
                                                          larry_session['cycle_hours'])
-    entry_price = volatility_breakout_price(prev_high=max(mongo_prices),
-                                            prev_low=min(mongo_prices),
-                                            prev_price=mongo_prices[-1],
-                                            x=larry_session['x'],
-                                            position=larry_session['position'])
-    larry_session['entry_price'] = entry_price
+    target_entry_price = volatility_breakout_price(prev_high=max(mongo_prices),
+                                                   prev_low=min(mongo_prices),
+                                                   prev_price=mongo_prices[-1],
+                                                   x=larry_session['x'],
+                                                   position=larry_session['position'])
+    larry_session['target_entry_price'] = target_entry_price
     db = db_connection('larry_sessions')
     db[larry_session['market']].insert_one(larry_session)
     return JSONResponse(status_code=status.HTTP_201_CREATED, content='Successfully Added')
