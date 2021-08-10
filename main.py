@@ -27,7 +27,7 @@ async def read_root():
 
 
 @app.post("/add/exchange_account/", response_description="Add new exchange account")
-async def add_exchange_info(data: ExchangeAccountModel):
+async def add_exchange_account(data: ExchangeAccountModel):
     exchange_account = jsonable_encoder(data)
     db = db_connection('exchange_accounts')
     insert_status = db[exchange_account['exchange_name']].insert_one(exchange_account)
