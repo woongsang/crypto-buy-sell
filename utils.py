@@ -22,17 +22,28 @@ def initialize_larry_session(larry_session):
     db[larry_session['market']].insert_one(larry_session)
 
 
-def reset_larry_session(session, data, position):
+def reset_larry_session(session, data):
+    long_target_price = None
+    short_target_price = None
+    position = 0
     if data['timestamp'] >= session['reset_timestamp']:
         position = None
+        db = db_connection('data')[session['market']]
+        mongo_timestamps, mongo_prices = retrieve_mongo_data(db, session['cycle_hours'])
+        long_target_price, short_target_price = volatility_breakout_price(
+            prev_high=max(mongo_prices),
+            prev_low=min(mongo_prices),
+            prev_price=mongo_prices[-1],
+            x=session['x'])
+
     session_db = db_connection('larry_sessions')
     content = {'coin_amount': None,
                'update_timestamp': data['timestamp'],
                'close_timestamp': None,
                'sl_tp_price': None,
                'position': position,
-               'long_target_price': None,
-               'short_target_price': None}
+               'long_target_price': long_target_price,
+               'short_target_price': short_target_price}
 
     if position is None:
         content['reset_timestamp'] += session['cycle_hours'] * 60 * 60 * 1000
@@ -107,9 +118,9 @@ def check_close_position(sessions_db, market, data):
             accounts_db = db_connection('exchange_accounts')
             account = accounts_db[session['exchange']].find_one({'_id': ObjectId(session['exchange_account_id'])})
             order = binance_api.close_position(account, session)
-            reset_larry_session(session, data, position=session['position'])
+            reset_larry_session(session, data)
             # remove_list.append(session['_id'])
 
         elif data['timestamp'] >= session['reset_timestamp']:
-            reset_larry_session(session, data, position=session['position'])
+            reset_larry_session(session, data)
     # sessions_db[market].delete_many({'_id': {'$in': remove_list}})
