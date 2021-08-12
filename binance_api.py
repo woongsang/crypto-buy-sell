@@ -1,6 +1,8 @@
 import ccxt
 from ccxt import ExchangeError
 
+from utils import background
+
 
 def get_future_api(api_key, secret_key):
     api = ccxt.binance(config={
@@ -13,6 +15,7 @@ def get_future_api(api_key, secret_key):
         }
     })
     return api
+
 
 # @background
 def open_position(account, session, current_price, position, currency='USDT', trade_type='limit'):

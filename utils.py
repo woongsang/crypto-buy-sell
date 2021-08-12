@@ -72,7 +72,7 @@ def update_after_open_position(session, data, position, order):
                   'sl_tp_price': order['price'] * (1 - position * session['sl_tp_percentage'] / 100)}}
     )
 
-
+@background
 def open_position(session, data, position):
     accounts_db = db_connection('exchange_accounts')
     account = accounts_db[session['exchange']].find_one({'_id': ObjectId(session['exchange_account_id'])})
@@ -108,19 +108,23 @@ def reached_close_timestamp(session, data):
     return session['close_timestamp'] is not None and data['timestamp'] >= session['close_timestamp']
 
 
+@background
+def close_position_session(session, data):
+    if reached_close_timestamp(session, data) or reached_stop_loss(session, data['price']):
+        accounts_db = db_connection('exchange_accounts')
+        account = accounts_db[session['exchange']].find_one({'_id': ObjectId(session['exchange_account_id'])})
+        order = binance_api.close_position(account, session)
+        reset_larry_session(session, data)
+        # remove_list.append(session['_id'])
+
+    elif data['timestamp'] >= session['reset_timestamp']:
+        reset_larry_session(session, data)
+
+
 def check_close_position(sessions_db, market, data):
     sessions = sessions_db[market].find()
 
     # remove_list = []
     for session in sessions:
-
-        if reached_close_timestamp(session, data) or reached_stop_loss(session, data['price']):
-            accounts_db = db_connection('exchange_accounts')
-            account = accounts_db[session['exchange']].find_one({'_id': ObjectId(session['exchange_account_id'])})
-            order = binance_api.close_position(account, session)
-            reset_larry_session(session, data)
-            # remove_list.append(session['_id'])
-
-        elif data['timestamp'] >= session['reset_timestamp']:
-            reset_larry_session(session, data)
+        close_position_session(session, data)
     # sessions_db[market].delete_many({'_id': {'$in': remove_list}})
