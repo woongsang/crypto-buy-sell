@@ -1,4 +1,5 @@
 import ccxt
+from ccxt import ExchangeError
 
 
 def get_future_api(api_key, secret_key):
@@ -13,39 +14,47 @@ def get_future_api(api_key, secret_key):
     })
     return api
 
-
-def open_position(account, session, current_price, trade_type='limit'):
+# @background
+def open_position(account, session, current_price, position, currency='USDT', trade_type='limit'):
     api = get_future_api(account['api_key'], account['secret_key'])
 
-    total_balance = api.fetch_total_balance()
-    target_entry_amount = total_balance * session['entry_percentage'] / 100
-    limit_price = current_price * (1 + session['position'] * session['slippage_percentage'] / 100)
-    stop_loss_price = current_price * (1 - session['position'] * session['stop_loss_percentage'] / 100)
-    params = {'stopPrice': stop_loss_price}
-    # Todo: Apply stop-loss / take-profit when creating an order
-    side = 'buy' if session['position'] == 1 else 'sell'
+    balance = api.fetch_partial_balance(currency)
+    price = balance['total'] * session['entry_percentage'] / 100
+    price = min(price, balance['free'])
+    amount = price / current_price
 
-    api.set_leverage(symbol=session['market'],
+    limit_price = current_price * (1 + position * session['slippage_percentage'] / 100)
+
+    side = 'buy' if position == 1 else 'sell'
+    symbol = session['market'].replace(currency, '') + '/' + currency
+
+    api.set_leverage(symbol=symbol,
                      leverage=session['leverage_times'])
-    order = api.create_order(symbol=session['market'],
-                             type=trade_type,
-                             side=side,
-                             amount=target_entry_amount,
-                             price=limit_price)
-
+    order = None
+    try:
+        order = api.create_order(symbol=symbol,
+                                 type=trade_type,
+                                 side=side,
+                                 amount=amount,
+                                 price=limit_price,
+                                 # params={"reduceOnly": True}
+                                 )
+    except ExchangeError as e:
+        print(e)
     return order
 
 
-def close_position(account, session):
-    market = session['market']
+# @background
+def close_position(account, session, currency='USDT'):
 
     api = get_future_api(account['api_key'], account['secret_key'])
-    side = 'buy' if session['position'] == -1 else 'sell'
 
-    # Todo: how to determine the position amount? Doesn't it keep changing?
-    order = api.create_order(symbol=market,
+    side = 'buy' if session['position'] == -1 else 'sell'
+    symbol = session['market'].replace(currency, '') + '/' + currency
+
+    order = api.create_order(symbol=symbol,
                              type="MARKET",
                              side=side,
-                             amount=pos['positionAmt'],
+                             amount=session['coin_amount'],
                              params={"reduceOnly": True})
-    pass
+    return order

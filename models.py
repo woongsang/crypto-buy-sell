@@ -12,13 +12,21 @@ class ExchangeAccountModel(BaseModel):
 
 class LarrySessionModel(BaseModel):
     exchange_account_id: str
+    exchange: str
     market: str
     x: float
     cycle_hours: int
-    position: int
+    in_position_hours: int
     entry_percentage: float
-    stop_loss_percentage: float = 2
-    leverage_times: int = 1
-    slippage_percentage: float = 0.1
-    target_entry_price: float = None
-    close_timestamp: str = None
+    sl_tp_percentage: float
+    leverage_times: int
+    slippage_percentage: float
+
+    long_target_price: float = None
+    short_target_price: float = None
+    sl_tp_price: float = None
+    close_timestamp: int = None  # position end time
+    reset_timestamp: int = None
+    position: int = None
+    coin_amount: int = None
+    update_timestamp: int = None

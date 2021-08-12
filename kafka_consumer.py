@@ -1,7 +1,13 @@
+import json
+
 from mongo_utils import db_connection
 from utils import background, check_close_position, check_open_position
 from kafka import KafkaConsumer
 from dotenv import dotenv_values
+
+
+def remove_failed_orders():
+    pass
 
 
 @background
@@ -13,10 +19,12 @@ def consume_data(market):
                              enable_auto_commit=True,
                              )
     sessions_db = db_connection('larry_sessions')
-    for data in consumer:
+    for message in consumer:
+        data = json.loads(message.value)
         check_open_position(sessions_db, market, data, position=1)
         check_open_position(sessions_db, market, data, position=-1)
         check_close_position(sessions_db, market, data)
+        remove_failed_orders()
 
 
 def start_consuming():

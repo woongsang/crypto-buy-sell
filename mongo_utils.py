@@ -25,3 +25,4 @@ def retrieve_mongo_data(db, cycle_hours):
         price_list.append(result['price'])
 
     return timestamp_list, price_list
+
