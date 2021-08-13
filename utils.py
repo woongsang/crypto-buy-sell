@@ -87,7 +87,6 @@ def update_after_open_position(session, data, position, order):
     send_message_to_slack(account['slack_url'], str(order))
 
 
-@background
 def open_position(session, data, position):
     accounts_db = db_connection('exchange_accounts')
     account = accounts_db[session['exchange']].find_one({'_id': ObjectId(session['exchange_account_id'])})
@@ -123,7 +122,6 @@ def reached_close_timestamp(session, data):
     return session['close_timestamp'] is not None and data['timestamp'] >= session['close_timestamp']
 
 
-@background
 def close_position_session(session, data):
     close_timeout = reached_close_timestamp(session, data)
     sl_tp = reached_stop_loss_take_profit(session, data['price'])
