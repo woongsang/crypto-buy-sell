@@ -1,5 +1,7 @@
 import asyncio
+from datetime import datetime
 
+import requests
 from bson import ObjectId
 
 import binance_api
@@ -64,24 +66,37 @@ def background(f):
 # @background
 def update_after_open_position(session, data, position, order):
     session_db = db_connection('larry_sessions')
+    content = {'coin_amount': order['amount'],
+               'update_timestamp': data['timestamp'],
+               'close_timestamp': data['timestamp'] + session['in_position_hours'],
+               'sl_tp_price': order['price'] * (1 - position * session['sl_tp_percentage'] / 100)}
     session_db[session['market']].find_one_and_update(
         {'_id': session['_id']},
-        {'$set': {'coin_amount': order['amount'],
-                  'update_timestamp': data['timestamp'],
-                  'close_timestamp': data['timestamp'] + session['in_position_hours'],
-                  'sl_tp_price': order['price'] * (1 - position * session['sl_tp_percentage'] / 100)}}
+        {'$set': content}
     )
+
+    accounts_db = db_connection('exchange_accounts')
+    account = accounts_db[session['exchange']].find_one({'_id': ObjectId(session['exchange_account_id'])})
+
+    content['position'] = session['position']
+    content['market'] = session['market']
+    content['price'] = data['price']
+    content['update_timestamp'] = str(datetime.utcfromtimestamp(content['update_timestamp']/1000))
+    content['close_timestamp'] = str(datetime.utcfromtimestamp(content['close_timestamp'] / 1000))
+    send_message_to_slack(account['slack_url'], str(content))
+    send_message_to_slack(account['slack_url'], str(order))
+
 
 @background
 def open_position(session, data, position):
     accounts_db = db_connection('exchange_accounts')
     account = accounts_db[session['exchange']].find_one({'_id': ObjectId(session['exchange_account_id'])})
     order = binance_api.open_position(account, session, data['price'], position)
-    #Todo: check if the order was made
+    # Todo: check if the order was made
     update_after_open_position(session, data, position, order)
 
 
-def reached_stop_loss(session, current_price):
+def reached_stop_loss_take_profit(session, current_price):
     if session['position'] == 1 and current_price <= session['sl_tp_price']:
         return True
     if session['position'] == -1 and current_price >= session['sl_tp_price']:
@@ -110,21 +125,51 @@ def reached_close_timestamp(session, data):
 
 @background
 def close_position_session(session, data):
-    if reached_close_timestamp(session, data) or reached_stop_loss(session, data['price']):
+    close_timeout = reached_close_timestamp(session, data)
+    sl_tp = reached_stop_loss_take_profit(session, data['price'])
+    reset_timeout = data['timestamp'] >= session['reset_timestamp']
+    order = None
+    if close_timeout or sl_tp:
         accounts_db = db_connection('exchange_accounts')
         account = accounts_db[session['exchange']].find_one({'_id': ObjectId(session['exchange_account_id'])})
         order = binance_api.close_position(account, session)
         reset_larry_session(session, data)
         # remove_list.append(session['_id'])
 
-    elif data['timestamp'] >= session['reset_timestamp']:
+    elif reset_timeout:
         reset_larry_session(session, data)
+
+    content = {'close_timeout': close_timeout,
+               'sl_tp': sl_tp,
+               'reset_timeout': reset_timeout,
+               'time': datetime.utcfromtimestamp(data['timestamp']/1000),
+               'market': session['market'],
+               'price': data['price']}
+
+    accounts_db = db_connection('exchange_accounts')
+    account = accounts_db[session['exchange']].find_one({'_id': ObjectId(session['exchange_account_id'])})
+    send_message_to_slack(account['slack_url'], str(content))
+    if order is not None:
+        send_message_to_slack(account['slack_url'], str(order))
 
 
 def check_close_position(sessions_db, market, data):
-    sessions = sessions_db[market].find()
+    # sign = '$lte' if position == 1 else '$gte'
+    #
+    # sessions = sessions_db[market].find({'position': {'$in': [0, 1]},
+    #                                      '$or': [
+    #                                          {'close_timestamp': {'$lte': data['timestamp']}},
+    #                                          {'sl_tp_price': {sign: data['price']}}
+    #                                      ],
+    #                                      })
+    sessions = sessions_db[market].find({'position': {'$in': [-1, 1]}})
 
     # remove_list = []
     for session in sessions:
         close_position_session(session, data)
     # sessions_db[market].delete_many({'_id': {'$in': remove_list}})
+
+
+def send_message_to_slack(url, text):
+    payload = {'text': text}
+    requests.post(url, json=payload)
