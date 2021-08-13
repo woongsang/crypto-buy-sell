@@ -1,8 +1,6 @@
 import ccxt
 from ccxt import ExchangeError
 
-from utils import background
-
 
 def get_future_api(api_key, secret_key):
     api = ccxt.binance(config={
