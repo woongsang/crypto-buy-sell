@@ -10,6 +10,12 @@ class ExchangeAccountModel(BaseModel):
     slack_url: Optional[str] = None
 
 
+class RequestApiModel(BaseModel):
+    id: str
+    url: str
+    elements: str
+
+
 class LarrySessionModel(BaseModel):
     exchange_account_id: str
     exchange: str

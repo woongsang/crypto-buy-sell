@@ -4,16 +4,25 @@ from fastapi import FastAPI
 from fastapi.encoders import jsonable_encoder
 from pymongo import MongoClient
 from starlette import status
+from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse
-
-from buy_strategies import volatility_breakout_price
 from kafka_consumer import start_consuming
-from models import ExchangeAccountModel, LarrySessionModel
+
+from models import ExchangeAccountModel, LarrySessionModel, RequestApiModel
 
 from mongo_utils import db_connection
 from utils import initialize_larry_session
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 config = dotenv_values(".env")
 
 mongo_client = MongoClient(f"{config['MONGO_DB_HOST']}:{config['MONGO_DB_PORT']}/",
@@ -37,11 +46,38 @@ async def add_exchange_account(data: ExchangeAccountModel):
 
 @app.post("/start/larry_session/", response_description="Start a new larry session")
 async def start_larry_session(data: LarrySessionModel):
-
     larry_session = jsonable_encoder(data)
     initialize_larry_session(larry_session)
 
     return JSONResponse(status_code=status.HTTP_201_CREATED, content='Successfully Added')
+
+
+@app.post("/request_api/", response_description="add request")
+async def add_api_request(data: RequestApiModel):
+    request_api = jsonable_encoder(data)
+    db = db_connection('web_config')
+
+    db['request'].delete_many({'id': request_api['id']})
+
+    insert_status = db['request'].insert_one(request_api)
+
+    return JSONResponse(status_code=status.HTTP_201_CREATED,
+                        content=f"Successfully Added with id '{insert_status.inserted_id}'")
+
+
+@app.get("/request_api/", response_description="add request")
+async def add_api_request():
+    db = db_connection('web_config')
+    results = db.get_collection('request').find()
+    request_list = []
+    for result in results:
+        request_list.append({
+            'id': result['id'],
+            'url': result['url'],
+            'elements': result['elements']
+        })
+
+    return request_list
 
 
 if __name__ == "__main__":
