@@ -8,7 +8,7 @@ from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse
 
 from kafka_consumer import start_consuming
-from models import ExchangeAccount, LarrySession
+from models import ExchangeAccount, LarrySession, RequestApi
 
 from mongo_utils import db_connection
 from utils import initialize_larry_session
@@ -54,7 +54,7 @@ async def start_larry_session(data: LarrySession):
 
 
 @app.post("/request_api/", response_description="add request")
-async def add_api_request(data: RequestApiModel):
+async def add_api_request(data: RequestApi):
     request_api = jsonable_encoder(data)
     db = db_connection('web_config')
 
