@@ -10,6 +10,12 @@ class ExchangeAccount(BaseModel):
     slack_url: Optional[str] = None
 
 
+class RequestApi(BaseModel):
+    id: str
+    url: str
+    elements: str
+
+
 class LarrySession(BaseModel):
     exchange_account_id: str
     exchange: str
@@ -29,9 +35,7 @@ class LarrySession(BaseModel):
     stop_loss_price: float = None
 
     close_timestamp: int = None  # position end time
-    sliding_timestamp: int = None
-
+    reset_timestamp: int = None
     position: int = None
-
     coin_amount: int = None
-    average_price: float = None
+    update_timestamp: int = None
