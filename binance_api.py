@@ -59,3 +59,15 @@ def close_position(account, session, currency='USDT'):
                              amount=session['coin_amount'],
                              params={"reduceOnly": True})
     return order
+
+
+def fetch_order(account, order_id, session, currency='USDT'):
+    symbol = session['market'].replace(currency, '') + '/' + currency
+    api = get_future_api(account['api_key'], account['secret_key'])
+    return api.fetch_order(order_id, symbol)
+
+
+def cancel_order(account, order_id, session, currency='USDT'):
+    symbol = session['market'].replace(currency, '') + '/' + currency
+    api = get_future_api(account['api_key'], account['secret_key'])
+    return api.cancel_order(order_id, symbol)

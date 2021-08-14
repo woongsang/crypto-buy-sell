@@ -6,9 +6,8 @@ from pymongo import MongoClient
 from starlette import status
 from starlette.responses import JSONResponse
 
-from buy_strategies import volatility_breakout_price
 from kafka_consumer import start_consuming
-from models import ExchangeAccountModel, LarrySessionModel
+from models import ExchangeAccount, LarrySession
 
 from mongo_utils import db_connection
 from utils import initialize_larry_session
@@ -27,7 +26,7 @@ async def read_root():
 
 
 @app.post("/add/exchange_account/", response_description="Add new exchange account")
-async def add_exchange_account(data: ExchangeAccountModel):
+async def add_exchange_account(data: ExchangeAccount):
     exchange_account = jsonable_encoder(data)
     db = db_connection('exchange_accounts')
     insert_status = db[exchange_account['exchange_name']].insert_one(exchange_account)
@@ -36,7 +35,7 @@ async def add_exchange_account(data: ExchangeAccountModel):
 
 
 @app.post("/start/larry_session/", response_description="Start a new larry session")
-async def start_larry_session(data: LarrySessionModel):
+async def start_larry_session(data: LarrySession):
 
     larry_session = jsonable_encoder(data)
     initialize_larry_session(larry_session)
