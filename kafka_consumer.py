@@ -21,6 +21,7 @@ def consume_data(market):
         data = json.loads(message.value)
         run_sessions(sessions_db, market, data)
 
+
 def start_consuming():
     config = dotenv_values(".env")
     markets = config['SUBSCRIPTION_LIST'].split(',')

@@ -39,8 +39,8 @@ def initialize_larry_session(session):
     mongo_timestamps, mongo_prices = retrieve_mongo_data(db, session['cycle_hours'])
     long_target_price, short_target_price = get_target_prices(session, mongo_prices)
 
-    session['long_target_price_dict'] = [{str(mongo_timestamps[-1]): long_target_price}]
-    session['short_target_price_dict'] = [{str(mongo_timestamps[-1]): short_target_price}]
+    session['long_target_price_dict'] = {str(mongo_timestamps[-1]): long_target_price}
+    session['short_target_price_dict'] = {str(mongo_timestamps[-1]): short_target_price}
 
     session['sliding_timestamp'] = mongo_timestamps[-1] + session['sliding_hours'] * 60 * 60 * 1000
 
