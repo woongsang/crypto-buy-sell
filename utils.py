@@ -54,7 +54,7 @@ def get_target_prices(session, mongo_prices):
     sorted_prices = sorted(mongo_prices)
     return volatility_breakout_price(prev_high=sorted_prices[-20],
                                      prev_low=sorted_prices[20],
-                                     prev_price=sum(mongo_prices[0:50]) / 50,
+                                     prev_price=sum(mongo_prices[0:500]) / 500,
                                      x=session['x'])
 
 
