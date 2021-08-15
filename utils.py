@@ -181,7 +181,7 @@ def reached_target_price(session, data, position):
             delete_count -= 1
 
     key_list = []
-    if delete_count == 0:
+    if delete_count == len(price_dict):
         return False
 
     for idx, timestamp in enumerate(reversed(list(price_dict.keys()))):
