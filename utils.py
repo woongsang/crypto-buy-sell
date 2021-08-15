@@ -174,14 +174,14 @@ def reached_target_price(session, data, position):
     else:
         raise KeyError("Wrong position value!")
 
-    delete_count = len(price_dict)
+    delete_count = 0
     for idx, timestamp in enumerate(reversed(list(price_dict.keys()))):
         if ((position == 1 and data['price'] >= price_dict[timestamp])
                 or (position == -1 and data['price'] <= price_dict[timestamp])):
-            delete_count -= 1
+            delete_count += 1
 
     key_list = []
-    if delete_count == len(price_dict):
+    if delete_count != 0:
         return False
 
     for idx, timestamp in enumerate(reversed(list(price_dict.keys()))):
