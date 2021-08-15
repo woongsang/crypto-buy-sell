@@ -4,6 +4,7 @@ from datetime import datetime
 import requests
 from bson import ObjectId
 
+import back_testing
 import binance_api
 from buy_strategies import volatility_breakout_price
 from mongo_utils import db_connection, retrieve_mongo_data
@@ -51,8 +52,8 @@ def initialize_larry_session(session):
 
 def get_target_prices(session, mongo_prices):
     sorted_prices = sorted(mongo_prices)
-    return volatility_breakout_price(prev_high=sorted_prices[-100],
-                                     prev_low=sorted_prices[100],
+    return volatility_breakout_price(prev_high=sorted_prices[-20],
+                                     prev_low=sorted_prices[20],
                                      prev_price=sum(mongo_prices[0:50]) / 50,
                                      x=session['x'])
 
@@ -145,10 +146,13 @@ def update_after_open_position(session, data, position, order_id):
 #     if
 
 
-def open_position(session, data, position):
+def open_position(session, data, position, back_test=False):
     accounts_db = db_connection('exchange_accounts')
     account = accounts_db[session['exchange']].find_one({'_id': ObjectId(session['exchange_account_id'])})
-    order = binance_api.open_position(account, session, data['price'], position)
+    if back_test:
+        order = back_testing.open_position()
+    else:
+        order = binance_api.open_position(account, session, data['price'], position)
     # check_order(account, session, order)
     return order
 
@@ -217,14 +221,17 @@ def reached_close_timestamp(session, data):
     return session['close_timestamp'] is not None and data['timestamp'] < session['close_timestamp']
 
 
-def close_position_session(session, data):
+def close_position_session(session, data, back_test=False):
     close_timeout = reached_close_timestamp(session, data)
     stop_loss = reached_stop_loss(session, data['price'])
 
     if close_timeout or stop_loss:
         accounts_db = db_connection('exchange_accounts')
         account = accounts_db[session['exchange']].find_one({'_id': ObjectId(session['exchange_account_id'])})
-        order = binance_api.close_position(account, session)
+        if back_test:
+            back_testing.close_position()
+        else:
+            order = binance_api.close_position(account, session)
         reset_larry_session(session)
 
     else:
