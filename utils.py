@@ -64,9 +64,14 @@ def update_sliding_data(session, current_timestamp):
 
     new_sliding_timestamp = session['sliding_timestamp'] + session['sliding_hours'] * 60 * 60 * 1000
 
+    del_keys = []
     for timestamp, target_price in session['long_target_price_dict'].items():
-        if current_timestamp >= int(timestamp) + session['sliding_hours']:
-            del session['long_target_price_dict'][timestamp]
+        if current_timestamp >= int(timestamp) + session['sliding_hours'] * 60 * 60 * 1000:
+            del_keys.append(timestamp)
+
+    for timestamp in del_keys:
+        del session['long_target_price_dict'][timestamp]
+        del session['short_target_price_dict'][timestamp]
 
     session['long_target_price_dict'][str(new_sliding_timestamp)] = long_target_price
     session['short_target_price_dict'][str(new_sliding_timestamp)] = short_target_price
@@ -88,7 +93,7 @@ def reset_larry_session(session):
     content = {'coin_amount': None,
                'close_timestamp': None,
                'stop_loss_price': None,
-               'position': 0,
+               'position': None,
                }
 
     session_db[session['market']].find_one_and_update(
@@ -158,9 +163,6 @@ def reached_stop_loss(session, current_price):
 
 
 def reached_target_price(session, data, position):
-    key_list = []
-    reached_target = False
-
     if position == 1:
         price_dict = session['long_target_price_dict']
     elif position == -1:
@@ -168,22 +170,33 @@ def reached_target_price(session, data, position):
     else:
         raise KeyError("Wrong position value!")
 
-    for timestamp, target_price in price_dict.items():
-        key_list.append(timestamp)
-        if (position == 1 and data['price'] >= target_price) or (position == -1 and data['price'] <= target_price):
-            # open_position(session, data, position)
-            reached_target = True
-            break
+    delete_count = len(price_dict)
+    for idx, timestamp in enumerate(reversed(list(price_dict.keys()))):
+        if ((position == 1 and data['price'] >= price_dict[timestamp])
+                or (position == -1 and data['price'] <= price_dict[timestamp])):
+            delete_count -= 1
 
-    if not reached_target:
+    key_list = []
+    if delete_count == 0:
         return False
 
-    if reached_target:
-        for key in key_list:
-            if key in price_dict:
-                del price_dict[key]
+    for idx, timestamp in enumerate(reversed(list(price_dict.keys()))):
+        if idx <= delete_count - 1:
+            key_list.append(timestamp)
 
-    return reached_target
+    for key in key_list:
+        if key in price_dict:
+            del session['long_target_price_dict'][key]
+            del session['short_target_price_dict'][key]
+
+    session_db = db_connection('larry_sessions')
+    session_db[session['market']].find_one_and_update(
+        {'_id': session['_id']},
+        {'$set': {'long_target_price_dict': session['long_target_price_dict'],
+                  'short_target_price_dict': session['short_target_price_dict']}}
+    )
+
+    return True
 
 
 def open_position_session(session, data):
@@ -201,20 +214,14 @@ def open_position_session(session, data):
 
 
 def reached_close_timestamp(session, data):
-    return session['close_timestamp'] is not None and data['timestamp'] >= session['close_timestamp']
+    return session['close_timestamp'] is not None and data['timestamp'] < session['close_timestamp']
 
 
 def close_position_session(session, data):
     close_timeout = reached_close_timestamp(session, data)
     stop_loss = reached_stop_loss(session, data['price'])
 
-    if close_timeout:
-        accounts_db = db_connection('exchange_accounts')
-        account = accounts_db[session['exchange']].find_one({'_id': ObjectId(session['exchange_account_id'])})
-        order = binance_api.close_position(account, session)
-        reset_larry_session(session)
-
-    elif stop_loss:
+    if close_timeout or stop_loss:
         accounts_db = db_connection('exchange_accounts')
         account = accounts_db[session['exchange']].find_one({'_id': ObjectId(session['exchange_account_id'])})
         order = binance_api.close_position(account, session)

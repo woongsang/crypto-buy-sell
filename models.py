@@ -35,7 +35,6 @@ class LarrySession(BaseModel):
     stop_loss_price: float = None
 
     close_timestamp: int = None  # position end time
-    reset_timestamp: int = None
     position: int = None
     coin_amount: int = None
     update_timestamp: int = None

@@ -6,8 +6,6 @@ from kafka import KafkaConsumer
 from dotenv import dotenv_values
 
 
-
-
 @background
 def consume_data(market):
     config = dotenv_values(".env")
