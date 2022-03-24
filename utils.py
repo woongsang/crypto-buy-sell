@@ -11,6 +11,7 @@ from mongo_utils import db_connection, retrieve_mongo_data
 
 
 def update_stop_loss(session, data):
+    # Todo: Implement to update SL
     pass
 
 
@@ -22,15 +23,31 @@ def timeout_update_session(session, data):
     return True
 
 
-def run_sessions(sessions_db, market, data):
+def process_position(session, data):
+    if session['position'] is None:  # not holding any position
+        open_position_session(session, data)
+    elif session['position'] in [1, -1]:  # either long or short
+        position_closed = close_position_session(session, data)
+        if not position_closed:
+            update_stop_loss(session, data)
+
+
+# def process_position_bt(session, data):
+#     if session['position'] is None:  # not holding any position
+#         open_position_session_bt(session, data)
+#     elif session['position'] in [1, -1]:  # either long or short
+#         position_closed = close_position_session_bt(session, data)
+#         if not position_closed:
+#             update_stop_loss(session, data)
+
+
+def run_sessions(sessions_db, market, data, bt=False):
     sessions = sessions_db[market].find()
     for session in sessions:
-        if session['position'] is None:  # not holding any position
-            open_position_session(session, data)
-        elif session['position'] in [1, -1]:  # either long or short
-            position_closed = close_position_session(session, data)
-            if not position_closed:
-                update_stop_loss(session, data)
+        # if bt:
+        #     process_position_bt(session, data)
+        # else:
+        process_position(session, data)
 
         timeout_update_session(session, data)
 
@@ -52,9 +69,9 @@ def initialize_larry_session(session):
 
 def get_target_prices(session, mongo_prices):
     sorted_prices = sorted(mongo_prices)
-    return volatility_breakout_price(prev_high=sorted_prices[-20],
-                                     prev_low=sorted_prices[20],
-                                     prev_price=sum(mongo_prices[0:500]) / 500,
+    return volatility_breakout_price(prev_high=sorted_prices[-10],
+                                     prev_low=sorted_prices[10],
+                                     prev_price=sum(mongo_prices[0:20]) / 20,
                                      x=session['x'])
 
 
@@ -111,16 +128,8 @@ def background(f):
 
 
 # @background
-def update_after_open_position(session, data, position, order_id):
-    accounts_db = db_connection('exchange_accounts')
-    account = accounts_db[session['exchange']].find_one({'_id': ObjectId(session['exchange_account_id'])})
+def update_after_open_position(session, data, position, order):
 
-    order = binance_api.fetch_order(account, order_id, session)
-
-    if order['remaining'] > 0.0:
-        order = binance_api.cancel_order(account, order_id, session)
-        if order['filled'] == 0:
-            position = 0
     session_db = db_connection('larry_sessions')
 
     content = {'coin_amount': order['filled'],
@@ -138,6 +147,10 @@ def update_after_open_position(session, data, position, order_id):
     content['market'] = session['market']
     content['price'] = data['price']
     content['close_timestamp'] = str(datetime.utcfromtimestamp(content['close_timestamp'] / 1000))
+
+    accounts_db = db_connection('exchange_accounts')
+    account = accounts_db[session['exchange']].find_one({'_id': ObjectId(session['exchange_account_id'])})
+
     send_message_to_slack(account['slack_url'], str(content))
     send_message_to_slack(account['slack_url'], str(order))
 
@@ -146,15 +159,17 @@ def update_after_open_position(session, data, position, order_id):
 #     if
 
 
-def open_position(session, data, position, back_test=False):
+def open_position(session, data, position):
     accounts_db = db_connection('exchange_accounts')
     account = accounts_db[session['exchange']].find_one({'_id': ObjectId(session['exchange_account_id'])})
-    if back_test:
-        order = back_testing.open_position()
-    else:
-        order = binance_api.open_position(account, session, data['price'], position)
+    order = binance_api.open_position(account, session, data['price'], position)
     # check_order(account, session, order)
     return order
+
+
+def open_position_bt(session, data, position):
+    # Todo: create order simulation
+    return None
 
 
 def reached_stop_loss(session, current_price):
@@ -166,7 +181,7 @@ def reached_stop_loss(session, current_price):
     return False
 
 
-def reached_target_price(session, data, position):
+def reached_target_price(session, data, position, bt=False):
     if position == 1:
         price_dict = session['long_target_price_dict']
     elif position == -1:
@@ -181,7 +196,7 @@ def reached_target_price(session, data, position):
             delete_count += 1
 
     key_list = []
-    if delete_count != 0:
+    if delete_count <= 0:
         return False
 
     for idx, timestamp in enumerate(reversed(list(price_dict.keys()))):
@@ -193,7 +208,7 @@ def reached_target_price(session, data, position):
             del session['long_target_price_dict'][key]
             del session['short_target_price_dict'][key]
 
-    session_db = db_connection('larry_sessions')
+    session_db = db_connection('larry_sessions') if bt is False else db_connection('larry_sessions_bt')
     session_db[session['market']].find_one_and_update(
         {'_id': session['_id']},
         {'$set': {'long_target_price_dict': session['long_target_price_dict'],
@@ -201,6 +216,19 @@ def reached_target_price(session, data, position):
     )
 
     return True
+
+
+def fetch_order(session, order_id, position):
+    accounts_db = db_connection('exchange_accounts')
+    account = accounts_db[session['exchange']].find_one({'_id': ObjectId(session['exchange_account_id'])})
+
+    order = binance_api.fetch_order(account, order_id, session)
+
+    if order['remaining'] > 0.0:
+        order = binance_api.cancel_order(account, order_id, session)
+        if order['filled'] == 0:
+            position = 0
+    return position
 
 
 def open_position_session(session, data):
@@ -212,9 +240,22 @@ def open_position_session(session, data):
         order = open_position(session, data, position)
     else:
         return False
-
+    fetch_order(session, order['id'], position)
     update_after_open_position(session, data, position, order['id'])
     return True
+
+# def open_position_session_bt(session, data):
+#     if reached_target_price(session, data, 1):
+#         position = 1
+#         order = open_position_bt(session, data, position)
+#     elif reached_target_price(session, data, -1):
+#         position = -1
+#         order = open_position_bt(session, data, position)
+#     else:
+#         return False
+#
+#     update_after_open_position_bt(session, data, position, order['id'])
+#     return True
 
 
 def reached_close_timestamp(session, data):
@@ -224,7 +265,7 @@ def reached_close_timestamp(session, data):
 def close_position_session(session, data, back_test=False):
     close_timeout = reached_close_timestamp(session, data)
     stop_loss = reached_stop_loss(session, data['price'])
-
+    order = None
     if close_timeout or stop_loss:
         accounts_db = db_connection('exchange_accounts')
         account = accounts_db[session['exchange']].find_one({'_id': ObjectId(session['exchange_account_id'])})
